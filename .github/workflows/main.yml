@@ -1,0 +1,57 @@
+name: Ultra Light Auto Logger Bot
+
+permissions:
+  contents: write
+
+on:
+  schedule:
+    # UTC 时间：北京时间偶数日 + 单数小时 + 09-22
+    - cron: '0 1-13/2 2-30/2 * *'
+  workflow_dispatch:
+
+jobs:
+  light-log:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+
+      - name: Set timezone to Asia/Shanghai
+        run: sudo timedatectl set-timezone Asia/Shanghai
+
+      - name: Runtime validation (human logic)
+        run: |
+          DAY=$(date +%d)
+          HOUR=$(date +%H)
+          WEEKDAY=$(date +%u)
+
+          # 偶数日
+          if [ $((10#$DAY % 2)) -ne 0 ]; then exit 0; fi
+          # 单数小时
+          if [ $((10#$HOUR % 2)) -eq 0 ]; then exit 0; fi
+          # 时间范围 09-22
+          if [ $HOUR -lt 9 ] || [ $HOUR -gt 21 ]; then exit 0; fi
+          # 周末降频（周六日仅 09:00 放行）
+          if [ $WEEKDAY -ge 6 ] && [ $HOUR -ne 9 ]; then exit 0; fi
+          # 10% 概率跳过
+          if [ $((RANDOM % 10)) -eq 0 ]; then exit 0; fi
+
+      - name: Random human delay
+        run: sleep $((RANDOM % 900))
+
+      - name: Append datetime to monthly log
+        run: |
+          mkdir -p logs
+          FILE="logs/$(date '+%Y-%m').log"
+          echo "$(date '+%Y-%m-%d %H:%M:%S')" >> $FILE
+
+      - name: Commit and push changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "chore: log timestamp $(date '+%Y-%m-%d %H:%M')" || exit 0
+          git push
